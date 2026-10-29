@@ -1,0 +1,4 @@
+streamlit
+pymodbus
+pandas
+plotly
