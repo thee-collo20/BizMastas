@@ -1,0 +1,111 @@
+# BizMastas
+
+Real-time monitoring dashboard for the **impregnation line** at Biashara Masters Sawmill
+(MDF, HDF, chipboard and lamination). It reads the line PLC over Modbus TCP and shows oven
+temperatures, drives, safety inputs and alarms in a Streamlit web app.
+
+## Features
+
+- Six-oven overview: actual vs setpoint, with OK / WARNING / CRITICAL status
+- Drives and process: main drive, line speed, hydraulic pump and pressure, unwinder, rewinder
+- Safety inputs: E-stop, resin level, board sensor
+- Alarm table (critical first) and a live banner
+- Oven temperature trend chart (last 200 samples)
+- Auto-refresh with a configurable interval, plus a manual refresh button
+- Shift label (Day / Afternoon / Night, Africa/Nairobi time), operator notes, CSV shift report
+- Simulation mode when the PLC is unreachable, clearly marked on screen
+
+## Quick start
+
+```bash
+git clone https://github.com/thee-collo20/BizMastas.git
+cd BizMastas
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+No PLC? The app falls back to simulated data automatically, or tick **Force simulation mode**
+in the sidebar for demos.
+
+## Configuration
+
+Everything lives in `config.py`.
+
+| Setting | Purpose | Default |
+|---|---|---|
+| `PLC_CONFIG` | PLC IP, port, timeout | `192.168.1.88`, `502`, 2 s |
+| `REGISTER_MAP` | Where each value lives in the PLC | see below |
+| `THRESHOLDS` | Alarm limits | warn 2 °C, crit 5 °C, speed tolerance 0.5 m/min |
+| `TIMEZONE` | Timestamps and shift labels | `Africa/Nairobi` |
+| `REFRESH_SECONDS` | Default auto-refresh | 5 |
+
+The PLC address and port can also be set without editing code:
+
+```bash
+export BIZMASTAS_PLC_IP=192.168.1.50
+export BIZMASTAS_PLC_PORT=502
+```
+
+### Register map
+
+| Table | Address | Meaning |
+|---|---|---|
+| Holding | 0-5 | Oven 1-6 actual temperature |
+| Holding | 10-15 | Oven 1-6 setpoint |
+| Holding | 20 / 21 | Line speed actual / setpoint |
+| Holding | 22 | Hydraulic pressure |
+| Coils | 0 / 1 / 2 / 3 | Main drive / hydraulic pump / unwinder / rewinder running |
+| Discrete inputs | 0 / 1 | E-stop OK / resin low |
+| Input registers | 0 / 1 | Board present / line temperature |
+
+Check these against the PLC program before relying on the dashboard. Modbus registers are
+16-bit integers, so if the PLC stores temperatures scaled (for example 1450 for 145.0 °C),
+divide the value in the `logic/` module that reads it.
+
+### Alarm rules
+
+| Alarm | Level | Condition |
+|---|---|---|
+| Oven drifting | WARN | \|actual - setpoint\| > 2 °C |
+| Oven off target | CRIT | \|actual - setpoint\| > 5 °C |
+| Main drive stopped | CRIT | main drive coil off |
+| Line speed unstable | WARN | drive running and speed differs from setpoint by 0.5 m/min or more |
+| E-stop pressed | CRIT | E-stop input not OK |
+| Resin level low | WARN | resin-low input on |
+| PLC read failed | WARN | a Modbus table could not be read |
+
+## Project layout
+
+```
+app.py             Streamlit dashboard (UI, auto-refresh, report)
+config.py          PLC settings, register map, thresholds
+modbus_client.py   Modbus TCP reads (readAll, FactoryPLC) and the simulator
+logic/
+  ovens.py         Six-oven temperature logic
+  motors.py        Drives, pump, line speed
+  sensors.py       Safety and process inputs
+  alarms.py        Combines everything into one alarm list
+tests/             pytest tests for the logic modules
+```
+
+`app.py` calls each module in `logic/` and combines the results, so a new part of the line
+means a new module plus a few lines in `app.py`.
+
+## Tests
+
+```bash
+pip install pytest
+python -m pytest tests
+```
+
+## Notes
+
+- The dashboard is read-only: it never writes to the PLC.
+- It is a monitoring aid, not a safety system. Do not use it in place of the machine's own
+  E-stop and interlocks.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

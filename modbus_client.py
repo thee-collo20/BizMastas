@@ -1,55 +1,68 @@
-from __future__ import annotations
+"""Central configuration for BizMastas.
 
-from typing import Any, Dict
+Everything site-specific lives here: PLC connection, register map, alarm
+thresholds and display settings. The logic modules read their register
+addresses from REGISTER_MAP, so if the PLC program changes you only edit
+this file.
+"""
+import os
 
-from pymodbus.client import ModbusTcpClient
+# --- PLC connection (override with environment variables) -------------------
+PLC_CONFIG = {
+    "ip": os.getenv("BIZMASTAS_PLC_IP", "192.168.1.88"),
+    "port": int(os.getenv("BIZMASTAS_PLC_PORT", "502")),
+    "timeout": 2,  # seconds
+}
 
-from config import PLC_CONFIG
+# --- Display ----------------------------------------------------------------
+TIMEZONE = "Africa/Nairobi"   # used for timestamps and shift labels
+REFRESH_SECONDS = 5           # default auto-refresh interval
+TREND_POINTS = 200            # samples kept for the trend chart
 
+# --- How many items to read from each Modbus table (all start at address 0) --
+READ_BLOCKS = {
+    "coils": 8,
+    "discrete": 8,
+    "holding": 30,
+    "input_regs": 10,
+}
 
-def readAll(client: ModbusTcpClient) -> Dict[str, Any]:
-    """Read the standard Modbus registers used by the BizMastas dashboard."""
-    data: Dict[str, Any] = {}
+# --- Register map (single source of truth, used by logic/*.py) ---------------
+REGISTER_MAP = {
+    "holding": {
+        "oven_actual": [0, 1, 2, 3, 4, 5],        # ovens 1-6, actual temp
+        "oven_setpoint": [10, 11, 12, 13, 14, 15],  # ovens 1-6, setpoint
+        "line_speed_actual": 20,
+        "line_speed_setpoint": 21,
+        "hydraulic_pressure": 22,
+    },
+    "coils": {
+        "main_drive": 0,
+        "hydraulic_pump": 1,
+        "unwinder": 2,
+        "rewinder": 3,
+    },
+    "discrete": {
+        "e_stop_ok": 0,
+        "resin_low": 1,
+    },
+    "input_regs": {
+        "board_present": 0,
+        "line_temp": 1,
+    },
+}
 
-    try:
-        coils = client.read_coils(0, 8)
-        if not coils.isError():
-            data["coils"] = list(coils.bits[:8])
+# --- Alarm thresholds ---------------------------------------------------------
+THRESHOLDS = {
+    "oven_warn_delta": 2.0,      # °C from setpoint -> WARNING
+    "oven_crit_delta": 5.0,      # °C from setpoint -> CRITICAL
+    "oven_running_min": 50.0,    # °C above which an oven counts as running
+    "speed_tolerance": 0.5,      # m/min between actual and setpoint
+}
 
-        discrete = client.read_discrete_inputs(0, 8)
-        if not discrete.isError():
-            data["discrete"] = list(discrete.bits[:8])
-
-        holding = client.read_holding_registers(0, 30)
-        if not holding.isError():
-            data["holding"] = list(holding.registers[:30])
-
-        input_regs = client.read_input_registers(0, 10)
-        if not input_regs.isError():
-            data["input_regs"] = list(input_regs.registers[:10])
-
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        data["Error"] = str(exc)
-
-    return data
-
-
-class FactoryPLC:
-    def __init__(self, host: str | None = None, port: int | None = None, timeout: int | None = None):
-        self.client = ModbusTcpClient(
-            host or PLC_CONFIG["ip"],
-            port=port if port is not None else PLC_CONFIG["port"],
-            timeout=timeout if timeout is not None else PLC_CONFIG["timeout"],
-        )
-
-    def connect(self):
-        return self.client.connect()
-
-    def read_all(self):
-        return readAll(self.client)
-
-    def close(self):
-        try:
-            self.client.close()
-        except Exception:
-            pass
+# --- Values used when a register could not be read ---------------------------
+DEFAULTS = {
+    "oven_setpoint": 145.0,
+    "line_speed_setpoint": 22.0,
+    "hydraulic_pressure": 35.2,
+}

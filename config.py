@@ -1,25 +1,17 @@
-PLC_CONFIG={
-    "ip" : "192.168.1.88",
-    "port" : 502,
-    "timeout" : 2
-}
+"""Discrete safety / process inputs and analog input registers."""
+from config import REGISTER_MAP
+from logic import bit, reg
 
-REGISTAR_MAP={
-    "holding" : {
-        0:"Oven1_Actual",
-        1:"Oven2_Actual",
-        2:"Oven1_Setpoint",
-        3:"Oven2_Setpoint",
-        10:"Line_Speed",
-        11:"Pressure"
-    },
-    "coils" : {
-        0:"Motor_RUN",
-        1:"Hydraulic_pump",
-        2:"Heater_Enable"
-    }, 
-    "descrete_Inputs" : {
-        0:"Board_Sensor",
-        2:"E_STOP_OK"
+
+def process_sensors(discrete_inputs, input_regs):
+    discrete_inputs = discrete_inputs or []
+    input_regs = input_regs or []
+    d = REGISTER_MAP["discrete"]
+    i = REGISTER_MAP["input_regs"]
+
+    return {
+        "e_stop_ok": bit(discrete_inputs, d["e_stop_ok"], True),
+        "resin_low": bit(discrete_inputs, d["resin_low"], False),
+        "board_present": bit(input_regs, i["board_present"], False),
+        "line_temp": reg(input_regs, i["line_temp"], 0.0),
     }
-}
