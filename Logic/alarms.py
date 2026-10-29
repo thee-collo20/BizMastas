@@ -1,17 +1,25 @@
-# Sensor evaluation for discrete safety and process inputs.
+# Central alarms brain
 
 
-def process_sensors(discrete_inputs, input_regs):
-    if discrete_inputs is None:
-        discrete_inputs = []
-    if input_regs is None:
-        input_regs = []
+def evaluate_alarms(oven_data, motor_data, sensor_data):
+    alerts = []
 
-    result = {
-        "e_stop_ok": bool(discrete_inputs[0]) if len(discrete_inputs) > 0 else True,
-        "resin_low": bool(discrete_inputs[1]) if len(discrete_inputs) > 1 else False,
-        "board_present": bool(input_regs[0]) if len(input_regs) > 0 else False,
-        "line_temp": float(input_regs[1]) if len(input_regs) > 1 else 0.0,
-    }
+    for alarm in oven_data.get("alarms", []):
+        alerts.append({"level": "WARN" if "WARNING" in alarm else "CRIT", "msg": alarm})
 
-    return result
+    main_drive = motor_data.get("main_drive", {})
+    if not main_drive.get("run", True):
+        alerts.append({"level": "CRIT", "msg": "MAIN DRIVE STOPPED"})
+        if not main_drive.get("stable", True):
+            alerts.append({"level": "WARN", "msg": "LINE SPEED UNSTABLE"})
+
+    if not sensor_data.get("e_stop_ok", True):
+        alerts.append({"level": "CRIT", "msg": "E-STOP PRESSED"})
+    if sensor_data.get("resin_low", False):
+        alerts.append({"level": "WARN", "msg": "RESIN LEVEL LOW"})
+
+    return alerts
+
+
+def evaluate_alarm(oven_data, motor_data, sensor_data):
+    return evaluate_alarms(oven_data, motor_data, sensor_data)
