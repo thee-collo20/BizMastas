@@ -40,20 +40,32 @@ if REAL_PLC:
         client.connect()
         raw = readAll(client)
         client.close()
+        if not raw or "holding" not in raw:
+            raise KeyError("holding")
     except Exception:
         REAL_PLC = False
-        raw = {'coils':[True]*8, 'descrete':[True]*8, 'holding':[0]*30, 'input_regs':[0]*10}
+        raw = {
+            'coils': [True, True, True, True, False, False, False, False],
+            'descrete': [True, False, True, False, True, False],
+            'holding': [145, 146, 145, 147, 146, 148, 0, 0, 0, 0, 145, 145, 145, 145, 145, 145, 22.5, 22.5, 35.2] + [0] * 10,
+            'input_regs': [320, 85]
+        }
 else:
     raw = {
-        'coils':[True, True, True, True, False, False, False, False],
-        'descrete':[random.choice([True, False]), True, True, False],
-        'holding':[145 + random.uniform(-2, 2) for _ in range(6)] + [0]*4 + [22,22,35],
-        'input_regs':[320, 85]
+        'coils': [True, True, True, True, False, False, False, False],
+        'descrete': [random.choice([True, False]), True, True, False],
+        'holding': [145 + random.uniform(-2, 2) for _ in range(6)] + [0] * 4 + [22, 22, 35],
+        'input_regs': [320, 85]
     }
 
-oven_data = ovens.process_ovens(raw['holding'])
-motor_data = motors.process_motors(raw['coils'], raw['holding'])
-sensor_data = sensors.process_sensors(raw.get('descrete', []), raw.get('input_regs', []))
+holding = raw.get('holding', [0] * 30)
+coils = raw.get('coils', [False] * 8)
+discrete = raw.get('descrete', [True] * 8)
+input_regs = raw.get('input_regs', [0] * 10)
+
+oven_data = ovens.process_ovens(holding)
+motor_data = motors.process_motors(coils, holding)
+sensor_data = sensors.process_sensors(discrete, input_regs)
 alert_list = alarms.evaluate_alarms(oven_data, motor_data, sensor_data)
 
 cols = st.columns(3)
